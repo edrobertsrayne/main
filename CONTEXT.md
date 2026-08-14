@@ -25,24 +25,28 @@ The number of pomodoros a user expects to spend on a task. Set when the task is 
 _Avoid_: planned, target, expected
 
 **Actuals**:
-The number of focus sessions that have been counted against a task. Derived from the focus-session history; never stored as a counter on the task.
+The number of focus sessions that have been counted against a task. Derived from the focus-session history; never stored as a counter on the task. In v1, actuals are displayed per-task only; per-day aggregates are the future productivity-overview map's territory.
 _Avoid_: completed, done, spent
 
 **Primary Task**:
-A task the user has marked as one of today's main focuses. A subset of all (non-archived) tasks, scoped to a single day in the user's local timezone. Carries no extra weight in actuals — the marker is for planning, not measurement.
+A task the user has marked as one of today's main focuses. A subset of all (non-archived) tasks, scoped to a single day in the user's local timezone. Carries no extra weight in actuals — the marker is for planning, not measurement. Whether (and how) the primary marker gates the future streak-tracking map's daily-target rule is left for that effort to decide.
 _Avoid_: today task, focus task, important task
 
+**Done**:
+A user-marked boolean flag on a task, indicating the user considers the work finished. Independent of archive — a task can be done without being archived, or archived without being done (abandoned, deprioritised).
+_Avoid_: completed (overloaded with archive in user mental models)
+
 **Archived Task**:
-A task hidden from active lists. The task row and its focus-session history are preserved.
-_Avoid_: deleted, removed, hidden
+A task hidden from active lists. Independent of `done` — a task can be archived without being done (abandoned, deprioritised) or done without being archived (still visible). The task row and its focus-session history are preserved either way.
+_Avoid_: deleted, removed, hidden, completed
 
 **Local Day**:
-The calendar day in the user's browser timezone. A focus session started at 11:30pm and stopped at 12:15am belongs to two local days; it is attributed to the day on which it _started_.
+The calendar day in the user's browser timezone. A focus session is attributed to the single local day on which it _started_. Worked example: a focus session started at 11:30pm Monday and stopped at 12:15am Tuesday is attributed to Monday — its +1 to actuals is recorded against the focused task on Monday. Tuesday records nothing for this session.
 _Avoid_: today, current day
 
 **Workday**, **Daily Target**, **Streak**:
 _Deferred to the streak-tracking effort. Not part of the first vertical slice._
 
 **Pomodoro Cycle**:
-The classic 25 / 5 / 15 rhythm: a focus session, a short break, four focuses to a long break. In this app the cycle is auto-running — finishing a focus auto-starts the next break.
+The classic 25 / 5 / 15 rhythm: a focus session, a short break, four focuses to a long break. In this app the cycle is half-auto — finishing a focus auto-starts the next break, but a break ending does _not_ auto-start the next focus: the timer returns to idle and waits for an explicit `start focus` gesture.
 _Avoid_: round, sequence
