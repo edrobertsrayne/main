@@ -1,9 +1,9 @@
 # ADR 0001 — Timer state machine
 
-- **Status:** Accepted (subject to verification by [the canonical-rules research ticket](#research-verification))
+- **Status:** Accepted (subject to reopen tickets [#11](https://github.com/edrobertsrayne/pomodoro/issues/11), [#12](https://github.com/edrobertsrayne/pomodoro/issues/12), [#13](https://github.com/edrobertsrayne/pomodoro/issues/13) spawned by [#10](https://github.com/edrobertsrayne/pomodoro/issues/10))
 - **Date:** 2026-08-14
 - **Drives:** [Issue #3 — Document timer state machine shape](https://github.com/edrobertsrayne/pomodoro/issues/3)
-- **Verified by:** [Issue #10 — Research: Pomodoro Technique canonical rules](https://github.com/edrobertsrayne/pomodoro/issues/10)
+- **Verified by:** [Issue #10 — Research: Pomodoro Technique canonical rules](https://github.com/edrobertsrayne/pomodoro/issues/10) — resolved; spawned reopens #11 (long-break length), #12 (cycle counter on stop), #13 (gap-reset threshold). See [`docs/agents/research/pomodoro-canonical-rules.md`](https://github.com/edrobertsrayne/pomodoro/blob/research/pomodoro-canonical-rules/docs/agents/research/pomodoro-canonical-rules.md) on branch `research/pomodoro-canonical-rules`.
 
 ## Context
 
@@ -116,7 +116,14 @@ stateDiagram-v2
 
 <a id="research-verification"></a>
 
-A separate [research ticket](https://github.com/edrobertsrayne/pomodoro/issues/10) verifies these rules against authoritative Pomodoro Technique sources — particularly the "no pause" claim and the cycle-counter rules. If that research overturns any decision here, this ADR is reopened.
+Research on the canonical Pomodoro Technique rules is complete ([#10](https://github.com/edrobertsrayne/pomodoro/issues/10); findings in [`docs/agents/research/pomodoro-canonical-rules.md`](https://github.com/edrobertsrayne/pomodoro/blob/research/pomodoro-canonical-rules/docs/agents/research/pomodoro-canonical-rules.md)). Verdicts:
+
+- **"No pause" rule** — confirmed against Cirillo (Wikipedia citing Cirillo: "a pomodoro is indivisible"; Cirillo's Core Process: "work until the pomodoro rings"). No changes; citation can be tightened in a follow-up.
+- **Long break = 15 min** — **overturned**. Cirillo's archived Get Started pages and Wikipedia give **20–30 min**. Tracked in [issue #11](https://github.com/edrobertsrayne/pomodoro/issues/11).
+- **Cycle counter increments on every focus end (incl. `stop`)** — not directly stated in any primary source; defensible extrapolation. Tracked in [issue #12](https://github.com/edrobertsrayne/pomodoro/issues/12).
+- **Cycle counter resets on gap > 15 min** — **not in any primary source**; the 15-min number mirrors the now-overturned long-break length. Tracked in [issue #13](https://github.com/edrobertsrayne/pomodoro/issues/13).
+
+When #11, #12, #13 resolve, this ADR is revised in place.
 
 ## Consequences
 
