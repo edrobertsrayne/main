@@ -25,3 +25,6 @@ vite.config.ts.timestamp-*
 test-results
 # SQLite
 *.db
+
+# Wayfinder scratch (draft ticket bodies, map body drafts)
+.scratch/
