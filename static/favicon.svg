@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+	<title>Pomodoro</title>
+	<circle cx="32" cy="32" r="28" fill="#d9685a" />
+	<circle cx="32" cy="32" r="20" fill="#fff9f6" />
+	<path d="M32 18 L32 32 L42 38" stroke="#d9685a" stroke-width="3" stroke-linecap="round" fill="none" />
+</svg>

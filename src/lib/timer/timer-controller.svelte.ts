@@ -57,6 +57,16 @@ export type TimerControllerOptions = {
 	 * arithmetic of its own.
 	 */
 	onFocusEnd?: (input: FocusEndInput) => void;
+	/**
+	 * Called exactly once per natural break end (5-min or 20-min break
+	 * countdown hitting zero). NOT called when a break ends via `stop`
+	 * or `fast-forward-to-focus` — those paths don't "end" a break in
+	 * the audible sense (a `stop` is a deliberate user action; a fast-
+	 * forward is a deliberate user action). The signal hook is for the
+	 * session-end chime at break-end; the focus-end signals live on
+	 * `onFocusEnd`.
+	 */
+	onBreakEnd?: () => void;
 	deps?: Partial<Deps>;
 };
 
@@ -115,12 +125,14 @@ export class TimerController {
 	#intervalId: ReturnType<typeof setInterval> | null = null;
 	#transitioningStartedAt: number | null = null;
 	#onFocusEnd: ((input: FocusEndInput) => void) | null = null;
+	#onBreakEnd: (() => void) | null = null;
 
 	constructor(options: TimerControllerOptions = {}) {
 		this.#now = options.deps?.now ?? defaultNow;
 		this.#setInterval = options.deps?.setInterval ?? defaultSetInterval;
 		this.#clearInterval = options.deps?.clearInterval ?? defaultClearInterval;
 		this.#onFocusEnd = options.onFocusEnd ?? null;
+		this.#onBreakEnd = options.onBreakEnd ?? null;
 	}
 
 	// -- Public read-only getters (UI binds to these) -------------------------
@@ -301,6 +313,11 @@ export class TimerController {
 		this.#endBreak();
 		this.state = 'idle';
 		this.#resetForIdle();
+		// Fire the break-end callback for natural completion only.
+		// `stop` and `fastForwardToFocus` route through `#endBreak`
+		// directly and don't fire the callback — those are deliberate
+		// user actions, not session boundaries.
+		this.#onBreakEnd?.();
 	}
 
 	// -- Internals -----------------------------------------------------------

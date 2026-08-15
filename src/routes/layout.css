@@ -98,6 +98,40 @@ body {
 	}
 }
 
+/* Opacity-fade fallback for the focus-end title pulse. When the user
+   prefers reduced motion, the kinetic title oscillation is replaced by
+   a one-shot opacity fade on the timer region (the spec's #6 + #36
+   contract — the signal still arrives, just less kinetic). The fade
+   runs for 1.2s; the home route clears the `data-title-pulse`
+   attribute when the SessionSignals module sets `titlePulseMode` back
+   to 'off'. Scoped to the timer section so the rest of the page
+   doesn't pulse. */
+@keyframes focus-end-fade {
+	0% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.7;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+
+[data-timer][data-title-pulse='fade'] {
+	animation: focus-end-fade 1.2s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	[data-timer][data-title-pulse='fade'] {
+		/* Honor the user's preference: an even more muted signal.
+		   The opacity is held steady (no oscillation) but the title
+		   still changes briefly. The animation is intentionally short
+		   and uses linear easing — not a kinetic motion. */
+		animation: focus-end-fade 800ms ease-in-out;
+	}
+}
+
 body {
 	font-feature-settings: 'cv11', 'ss01';
 }

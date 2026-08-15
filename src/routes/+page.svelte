@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { TimerController } from '$lib/timer/timer-controller.svelte';
+	import { signals } from '$lib/timer/signals-instance';
 
 	type TaskRow = {
 		id: string;
@@ -21,6 +23,13 @@
 
 	const timer = new TimerController({
 		onFocusEnd: async (input) => {
+			// Session-end signals (Notification / chime / title pulse /
+			// favicon swap) fire here — the same edge that writes the
+			// focus_session row. The signals module reads `permission`
+			// and gates the Notification channel itself; the chime and
+			// visuals fire unconditionally.
+			signals.notifyFocusEnd();
+
 			const fd = new FormData();
 			fd.set('task_id', input.taskId);
 			fd.set('started_at', String(input.startedAt));
@@ -34,6 +43,12 @@
 			} catch {
 				// best-effort: the row will be missing, but the cycle continues
 			}
+		},
+		onBreakEnd: () => {
+			// Break-end signal: only the chime fires here (the spec
+			// limits the visual signals to focus-end). The chime is
+			// quieter than the focus-end one.
+			signals.notifyBreakEnd();
 		}
 	});
 
@@ -109,7 +124,19 @@
 	}
 
 	function startFocus() {
-		if (firstNonArchivedTask) timer.startFocus(firstNonArchivedTask.id);
+		if (!firstNonArchivedTask) return;
+		// The first `start focus` click is the user gesture that unlocks
+		// the audio context for both focus-end and break-end chimes.
+		// Subsequent calls are no-ops; the same context serves both
+		// session boundaries (browsers don't re-gate it after the first
+		// user activation on the page).
+		signals.unlockAudio();
+		// Spec choice: the favicon swaps back to the resting variant on
+		// the next `start focus` — the single, cleanest "user is back"
+		// edge. This also stops any running title pulse and clears the
+		// `data-title-pulse` attribute.
+		signals.resetOnNextStartFocus();
+		timer.startFocus(firstNonArchivedTask.id);
 	}
 </script>
 
@@ -117,12 +144,26 @@
      focus = coral tokens; break = sage tokens. See layout.css. -->
 <div data-phase={dataPhase} class="min-h-screen bg-[var(--bg)] text-[var(--ink)]">
 	<div class="mx-auto max-w-3xl px-6 py-10">
-		<header class="mb-8">
-			<h1 class="text-4xl font-semibold tracking-tight">Pomodoro</h1>
-			<p class="mt-1 text-sm text-[var(--ink-soft)]">Focused work, one pomodoro at a time.</p>
+		<header class="mb-8 flex items-baseline justify-between">
+			<div>
+				<h1 class="text-4xl font-semibold tracking-tight">Pomodoro</h1>
+				<p class="mt-1 text-sm text-[var(--ink-soft)]">Focused work, one pomodoro at a time.</p>
+			</div>
+			<a
+				href={resolve('/settings')}
+				data-settings-link
+				class="rounded-md px-3 py-1.5 text-xs text-[var(--ink-soft)] hover:bg-[var(--hover)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+				>Settings</a
+			>
 		</header>
 
-		<section aria-labelledby="timer-heading" class="mb-12" data-timer data-state={timer.state}>
+		<section
+			aria-labelledby="timer-heading"
+			class="mb-12"
+			data-timer
+			data-state={timer.state}
+			data-title-pulse={signals.titlePulseMode === 'off' ? null : signals.titlePulseMode}
+		>
 			<h2 id="timer-heading" class="sr-only">Timer</h2>
 
 			<div class="flex flex-col items-center gap-6">

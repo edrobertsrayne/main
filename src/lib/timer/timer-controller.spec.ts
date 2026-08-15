@@ -45,9 +45,11 @@ type FocusEndRecord = {
 };
 
 let focusCalls: FocusEndRecord[] = [];
+let breakCalls: number = 0;
 
 beforeEach(() => {
 	focusCalls = [];
+	breakCalls = 0;
 });
 
 afterEach(() => {
@@ -56,9 +58,12 @@ afterEach(() => {
 
 function makeController(
 	deps: FakeDeps,
-	onFocusEnd: (input: FocusEndRecord) => void = (i) => focusCalls.push(i)
+	onFocusEnd: (input: FocusEndRecord) => void = (i) => focusCalls.push(i),
+	onBreakEnd: () => void = () => {
+		breakCalls++;
+	}
 ) {
-	return new TimerController({ deps, onFocusEnd });
+	return new TimerController({ deps, onFocusEnd, onBreakEnd });
 }
 
 describe('initial state', () => {
@@ -563,6 +568,53 @@ describe('focus-end writes always happen', () => {
 		t.stop();
 		expect(t.transitioningPrompt).toBe('break');
 		expect(t.counter).toBe(0);
+	});
+});
+
+describe('onBreakEnd callback', () => {
+	it('fires on natural completion of a short break', () => {
+		const deps = makeDeps();
+		const t = makeController(deps);
+		t.startFocus('a');
+		t.ring();
+		t.confirm();
+		expect(t.state).toBe('break-running');
+		t.completeBreak();
+		expect(breakCalls).toBe(1);
+	});
+
+	it('fires on natural completion of a long break', () => {
+		const deps = makeDeps();
+		const t = makeController(deps);
+		t.counter = 3;
+		t.startFocus('a');
+		t.ring();
+		t.confirm();
+		expect(t.state).toBe('long-break-running');
+		t.completeBreak();
+		expect(breakCalls).toBe(1);
+	});
+
+	it('does NOT fire when a break ends via `stop`', () => {
+		const deps = makeDeps();
+		const t = makeController(deps);
+		t.startFocus('a');
+		t.ring();
+		t.confirm();
+		expect(t.state).toBe('break-running');
+		t.stop();
+		expect(breakCalls).toBe(0);
+	});
+
+	it('does NOT fire when a break ends via `fastForwardToFocus`', () => {
+		const deps = makeDeps();
+		const t = makeController(deps);
+		t.startFocus('a');
+		t.ring();
+		t.confirm();
+		expect(t.state).toBe('break-running');
+		t.fastForwardToFocus('b');
+		expect(breakCalls).toBe(0);
 	});
 });
 
