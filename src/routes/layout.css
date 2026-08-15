@@ -49,14 +49,13 @@
 	color-scheme: light;
 }
 
-[data-phase='focus'] {
-	--bg: var(--bg, #fcf4f1);
-	--surface: var(--surface, #fff9f6);
-	--accent: var(--accent, #d9685a);
-	--ink: var(--ink, #4a3a37);
-}
-
-:root[data-phase='break'] {
+/* Held palette swap. The four swapped tokens flip at focus-end
+   (focus-running → transitioning) and at break-end
+   (break-running | long-break-running → idle). Content-semantic tokens
+   (--error, --error-bg, --success) stay coral on both phases by design —
+   a row's meaning (over-estimate, done) must not change with the timer
+   phase. */
+[data-phase='break'] {
 	--bg: var(--bg-break);
 	--surface: var(--surface-break);
 	--accent: var(--accent-break);
@@ -72,6 +71,31 @@ body {
 	transition:
 		background-color 200ms ease,
 		color 200ms ease;
+}
+
+/* Palette-sensitive properties on the page root and its descendants
+   cross-fade over 200ms — a held colour change, not an animation. The
+   palette swap only overrides --bg, --surface, --accent, --ink, so
+   background-color and color are the properties that actually fade;
+   border-color is included because a couple of borders are written as
+   tokens that may adopt a sage equivalent in a later iteration. Reduced
+   motion turns the cross-fade off entirely: a held colour change is not
+   an animation, but a 200ms transition is still motion. */
+[data-phase],
+[data-phase] * {
+	transition:
+		background-color 200ms ease,
+		color 200ms ease,
+		border-color 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	html,
+	body,
+	[data-phase],
+	[data-phase] * {
+		transition: none;
+	}
 }
 
 body {

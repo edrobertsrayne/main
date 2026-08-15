@@ -602,3 +602,17 @@ describe('remainingMs getter', () => {
 		expect(t.remainingMs).toBe(0);
 	});
 });
+
+describe('transitioningTotalMs', () => {
+	it('is the constant 30-second auto-confirm duration regardless of state', () => {
+		const deps = makeDeps();
+		const t = makeController(deps);
+		expect(t.transitioningTotalMs).toBe(30 * 1000);
+		t.startFocus('a');
+		expect(t.transitioningTotalMs).toBe(30 * 1000);
+		t.ring();
+		expect(t.transitioningTotalMs).toBe(30 * 1000);
+		t.skip();
+		expect(t.transitioningTotalMs).toBe(30 * 1000);
+	});
+});

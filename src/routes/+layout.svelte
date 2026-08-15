@@ -9,6 +9,4 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<div data-phase="focus" class="min-h-screen bg-[var(--bg)] text-[var(--ink)]">
-	{@render children()}
-</div>
+{@render children()}

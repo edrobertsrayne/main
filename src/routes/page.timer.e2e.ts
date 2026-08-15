@@ -115,7 +115,7 @@ test('over-estimate error tone shows when actuals exceed estimate', async ({ pag
 		await expect(page.locator('[data-timer][data-state="focus-running"]')).toBeVisible();
 		await page.clock.runFor(25 * 60 * 1000);
 		await expect(page.locator('[data-timer][data-state="transitioning"]')).toBeVisible();
-		await page.click('[data-stop-prompt]');
+		await page.click('[data-skip]');
 		await expect(page.locator('[data-timer][data-state="idle"]')).toBeVisible();
 	}
 

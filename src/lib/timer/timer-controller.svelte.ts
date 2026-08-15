@@ -176,6 +176,11 @@ export class TimerController {
 		);
 	}
 
+	/** Total ms of the 30-second transitioning auto-confirm countdown. */
+	get transitioningTotalMs(): number {
+		return TRANSITIONING_AUTO_CONFIRM_MS;
+	}
+
 	// -- Actions -------------------------------------------------------------
 
 	/** idle → focus-running. Capture taskId + startedAt, apply gap-reset. */
