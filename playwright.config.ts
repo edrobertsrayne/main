@@ -9,5 +9,9 @@ export default defineConfig({
 			ENABLE_TEST_RESET: 'true'
 		}
 	},
-	testMatch: '**/*.e2e.{ts,js}'
+	testMatch: '**/*.e2e.{ts,js}',
+	// All tests share `local.db`. Run serially so concurrent runs don't
+	// trash each other's state (we reset the DB via /__test__/reset in
+	// beforeEach, but two workers can race on that endpoint).
+	workers: 1
 });

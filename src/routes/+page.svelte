@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { invalidate } from '$app/navigation';
+	import { TimerController } from '$lib/timer/timer-controller.svelte';
 
 	type TaskRow = {
 		id: string;
@@ -16,6 +18,47 @@
 
 	type Filter = 'all' | 'today' | 'done' | 'archived';
 	let filter = $state<Filter | null>(null);
+
+	const timer = new TimerController({
+		onFocusEnd: async (input) => {
+			const fd = new FormData();
+			fd.set('task_id', input.taskId);
+			fd.set('started_at', String(input.startedAt));
+			fd.set('stopped_at', String(input.stoppedAt));
+			fd.set('duration_seconds', String(input.durationSeconds));
+			fd.set('end_cause', input.endCause);
+			fd.set('time_zone', Intl.DateTimeFormat().resolvedOptions().timeZone);
+			try {
+				await fetch('?/recordFocus', { method: 'POST', body: fd });
+				await invalidate(() => true);
+			} catch {
+				// best-effort: the row will be missing, but the cycle continues
+			}
+		}
+	});
+
+	const firstNonArchivedTask = $derived(data.tasks.find((t) => !t.archived) ?? null);
+	const focusedTask = $derived(
+		timer.taskId ? (data.tasks.find((t) => t.id === timer.taskId) ?? null) : null
+	);
+	const focusPercent = $derived.by(() => {
+		void timer.nowTick;
+		if (timer.totalMs <= 0) return 0;
+		const elapsed = timer.totalMs - timer.remainingMs;
+		return Math.min(100, Math.max(0, (elapsed / timer.totalMs) * 100));
+	});
+	const timeText = $derived.by(() => {
+		void timer.nowTick;
+		const ms = Math.max(0, timer.remainingMs);
+		const totalSec = Math.ceil(ms / 1000);
+		const m = Math.floor(totalSec / 60);
+		const s = totalSec % 60;
+		return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+	});
+	const transitioningSecsLeft = $derived.by(() => {
+		void timer.nowTick;
+		return Math.max(0, Math.ceil(timer.transitioningRemainingMs / 1000));
+	});
 
 	const filtered = $derived.by((): TaskRow[] => {
 		const rows = data.tasks;
@@ -45,6 +88,10 @@
 			over: '●'.repeat(over)
 		};
 	}
+
+	function startFocus() {
+		if (firstNonArchivedTask) timer.startFocus(firstNonArchivedTask.id);
+	}
 </script>
 
 <div class="mx-auto max-w-3xl px-6 py-10">
@@ -52,6 +99,95 @@
 		<h1 class="text-4xl font-semibold tracking-tight">Pomodoro</h1>
 		<p class="mt-1 text-sm text-[var(--ink-soft)]">Focused work, one pomodoro at a time.</p>
 	</header>
+
+	<section aria-labelledby="timer-heading" class="mb-12" data-timer data-state={timer.state}>
+		<h2 id="timer-heading" class="sr-only">Timer</h2>
+
+		<div class="flex flex-col items-center gap-6">
+			<div
+				class="relative aspect-square w-64 rounded-full"
+				data-timer-ring
+				style:--p={focusPercent.toFixed(2)}
+				style:--ring-color="var(--accent)"
+			>
+				<div
+					class="absolute inset-0 rounded-full"
+					style:background="conic-gradient(var(--ring-color) calc(var(--p) * 1%), transparent 0)"
+				></div>
+				<div
+					class="absolute inset-2 flex items-center justify-center rounded-full bg-[var(--surface)] shadow-[var(--shadow)]"
+				>
+					<span class="text-7xl font-bold tabular-nums" data-timer-time>{timeText}</span>
+				</div>
+			</div>
+
+			<p
+				class="text-sm text-[var(--ink-soft)]"
+				data-focusing-on
+				data-task-id={focusedTask?.id ?? ''}
+			>
+				{#if focusedTask}
+					Focusing on <span class="font-medium text-[var(--ink)]">{focusedTask.title}</span>
+				{:else}
+					&nbsp;
+				{/if}
+			</p>
+
+			<p class="text-xs tracking-wider text-[var(--ink-soft)] uppercase" data-phase-label>
+				{timer.phaseLabel}
+			</p>
+
+			{#if timer.state === 'idle'}
+				<button
+					type="button"
+					data-start-focus
+					onclick={startFocus}
+					disabled={!firstNonArchivedTask}
+					class="rounded-full bg-[var(--accent)] px-6 py-2 text-sm font-medium text-[var(--on-accent)] transition-colors hover:bg-[var(--accent-2)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					Start focus
+				</button>
+				{#if !firstNonArchivedTask}
+					<p class="text-xs text-[var(--ink-soft)]">Add a task below to begin.</p>
+				{/if}
+			{:else if timer.state === 'focus-running'}
+				<button
+					type="button"
+					data-stop
+					onclick={() => timer.stop()}
+					class="rounded-full border border-[var(--border)] bg-[var(--surface)] px-6 py-2 text-sm font-medium text-[var(--ink)] transition-colors hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+				>
+					Stop
+				</button>
+			{:else if timer.state === 'transitioning'}
+				<!-- Minimal prompt stub: shows the prompt + auto-confirm countdown
+				     and a Stop button. The full break/long-break prompt UI lands
+				     in the next slice per Issue #22 acceptance. -->
+				<div
+					class="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4 text-center"
+					data-transitioning-prompt
+					data-prompt={timer.transitioningPrompt ?? ''}
+				>
+					<p class="text-sm text-[var(--ink)]">{timer.transitioningLabel}</p>
+					<p class="mt-1 text-xs text-[var(--ink-soft)]">
+						Auto-confirming in {transitioningSecsLeft}s
+					</p>
+					<button
+						type="button"
+						data-stop-prompt
+						onclick={() => timer.stop()}
+						class="mt-3 rounded-full border border-[var(--border)] bg-[var(--surface)] px-5 py-1.5 text-xs font-medium text-[var(--ink)] hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+					>
+						Stop
+					</button>
+				</div>
+			{:else}
+				<p class="text-xs text-[var(--ink-soft)]" data-break-running>
+					{timer.phaseLabel} — break controls arrive in the next slice.
+				</p>
+			{/if}
+		</div>
+	</section>
 
 	<section aria-labelledby="tasks-heading">
 		<div class="mb-3 flex items-baseline justify-between">

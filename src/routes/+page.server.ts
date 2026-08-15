@@ -8,6 +8,7 @@ import {
 	updateTaskEstimate,
 	updateTaskTitle
 } from '$lib/server/db/tasks';
+import { recordFocusSession } from '$lib/server/db/focus-sessions';
 
 /** @type {import('./$types').PageServerLoad} */
 export function load() {
@@ -79,5 +80,37 @@ export const actions = {
 		const db = getDb();
 		setTaskArchived(db, id, archived);
 		return { action: 'toggleArchive', id };
+	},
+
+	recordFocus: async ({ request }) => {
+		const data = await request.formData();
+		const taskId = String(data.get('task_id') ?? '');
+		const startedAt = Number(data.get('started_at') ?? 0);
+		const stoppedAt = Number(data.get('stopped_at') ?? 0);
+		const durationSeconds = Number(data.get('duration_seconds') ?? 0);
+		const endCause = String(data.get('end_cause') ?? '');
+		const timeZone = String(data.get('time_zone') ?? '');
+
+		if (!taskId) return fail(400, { message: 'task_id is required' });
+		if (!Number.isFinite(startedAt) || startedAt <= 0) {
+			return fail(400, { message: 'started_at is required' });
+		}
+		if (!Number.isFinite(stoppedAt) || stoppedAt <= 0) {
+			return fail(400, { message: 'stopped_at is required' });
+		}
+		if (endCause !== 'ring' && endCause !== 'stop') {
+			return fail(400, { message: 'end_cause must be ring or stop' });
+		}
+
+		const db = getDb();
+		recordFocusSession(db, {
+			taskId,
+			startedAt,
+			stoppedAt,
+			durationSeconds,
+			endCause,
+			timeZone: timeZone || undefined
+		});
+		return { ok: true };
 	}
 };
