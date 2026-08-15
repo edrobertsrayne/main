@@ -1,10 +1,11 @@
 # ADR 0001 — Timer state machine
 
-- **Status:** Accepted (subject to reopen ticket [#13](https://github.com/edrobertsrayne/pomodoro/issues/13); [#11](https://github.com/edrobertsrayne/pomodoro/issues/11), [#12](https://github.com/edrobertsrayne/pomodoro/issues/12) resolved)
+- **Status:** Accepted ([#11](https://github.com/edrobertsrayne/pomodoro/issues/11), [#12](https://github.com/edrobertsrayne/pomodoro/issues/12), [#13](https://github.com/edrobertsrayne/pomodoro/issues/13) resolved)
 - **Date:** 2026-08-14
 - **Drives:** [Issue #3 — Document timer state machine shape](https://github.com/edrobertsrayne/pomodoro/issues/3)
 - **Verified by:** [Issue #10 — Research: Pomodoro Technique canonical rules](https://github.com/edrobertsrayne/pomodoro/issues/10) — resolved; spawned reopens #11 (long-break length), #12 (cycle counter on stop), #13 (gap-reset threshold). See [`docs/agents/research/pomodoro-canonical-rules.md`](https://github.com/edrobertsrayne/pomodoro/blob/research/pomodoro-canonical-rules/docs/agents/research/pomodoro-canonical-rules.md) on branch `research/pomodoro-canonical-rules`.
 - **Revised by:** [Issue #12 — Reopen: Decide whether interrupted pomodoros advance cycle counter](https://github.com/edrobertsrayne/pomodoro/issues/12) — resolved. Canonical model collapsed to two focus-end causes (`ring`, `stop`); ADR's prior `fast-forward to break` was an invention with no primary grounding, dissolved. `stop` now **resets** the cycle counter (not ticks, not halts): long breaks fire iff 4 *consecutive completed* pomodoros ring.
+- **Revised by:** [Issue #13 — Reopen: Decide cycle-counter gap-reset rule](https://github.com/edrobertsrayne/pomodoro/issues/13) — resolved. Gap-reset threshold retied to the long-break length as a **single shared variable** (was a standalone 15 min inherited from the old 15-min long break). Rule **kept**, not dropped: a long idle gap between rung focuses breaks the "consecutive completed" chain just as a `stop` does (#12); dropping it would let the counter span hours across an open tab, contradicting the destination's "2 hours of uninterrupted work." Gap measured from the last focus-end (`last_focus_end_at`).
 
 ## Context
 
@@ -18,9 +19,9 @@ Pausing a running focus is **not** a supported operation. The canonical Pomodoro
 
 ### Cycle counter
 
-The cycle counter ticks the **number of *consecutive completed* focuses** that have rung in the current cycle. It lives **in memory in the controller** (no persistence across page loads). It increments on **`ring`** only — natural completion. It **resets to 0** on any of: a `stop` (an interruption breaks the chain of consecutive completed pomodoros), when the gap between consecutive focus ends exceeds **15 minutes** (pending [#13](https://github.com/edrobertsrayne/pomodoro/issues/13) — the 15-min number inherited from the now-overturned 15-min long break and may yet drop entirely given `stop` now resets by the same "break-in-chain" principle), *or* after a long break ends.
+The cycle counter ticks the **number of *consecutive completed* focuses** that have rung in the current cycle. It lives **in memory in the controller** (no persistence across page loads). It increments on **`ring`** only — natural completion. It **resets to 0** on any of: a `stop` (an interruption breaks the chain of consecutive completed pomodoros), when the gap between consecutive focus ends **exceeds the long-break length**, *or* after a long break ends.
 
-The 15-minute gap threshold was originally motivated as "anything longer than a scheduled long break breaks the rhythm; anything shorter keeps the streak alive." **Note:** the long break is now 20 min (per [#11](https://github.com/edrobertsrayne/pomodoro/issues/11)), so this 15-min threshold no longer mirrors the long-break length; [#13](https://github.com/edrobertsrayne/pomodoro/issues/13) will decide whether to mirror 20 min, pick a different value, or drop the rule entirely (the now-likely outcome, since `stop` already resets the chain under the same principle that a gap would).
+The gap-reset threshold and the long-break length are **one variable, not two** (currently 20 min per [#11](https://github.com/edrobertsrayne/pomodoro/issues/11)). "Consecutive completed" requires temporal adjacency — "2 hours of uninterrupted work" is an explicit destination preference, and a long idle gap between rung focuses is the same kind of break-in-chain that a `stop` is (per [#12](https://github.com/edrobertsrayne/pomodoro/issues/12)). The gap is measured from the **last focus-end** (`last_focus_end_at`): a scheduled short break (5 min) plus an immediate next focus is a 5-min gap (no reset); a short break plus a 15-min dawdle is a 20-min gap (resets). Measuring from focus-end keeps the rule literal ("gap exceeds the long-break length") and needs no second magic number. The check is moot after a long break, since the counter is already 0. Resolved by [#13](https://github.com/edrobertsrayne/pomodoro/issues/13); this retires the prior standalone 15-min constant — a separate number inherited from the old 15-min long break that went stale when [#11](https://github.com/edrobertsrayne/pomodoro/issues/11) moved the long break to 20 min, and exactly the drift pinning both to one variable now prevents.
 
 ### Cycle counter on stop
 
@@ -99,7 +100,7 @@ stateDiagram-v2
 
     note right of focus_running
       On idle → focus_running:
-        if (now - last_focus_end_at) > 15 min:
+        if (now - last_focus_end_at) > long_break_length (20 min):
           counter := 0
         last_focus_end_at := now
         started_at := now
@@ -110,7 +111,7 @@ stateDiagram-v2
 
 | Trigger                                  | Side effects                                                 |
 | ---------------------------------------- | ------------------------------------------------------------ |
-| `idle → focus-running` (start focus)     | Capture `task_id`; set `started_at = now`; reset `last_focus_end_at` if stale gap; reset counter if gap > 15 min |
+| `idle → focus-running` (start focus)     | Capture `task_id`; set `started_at = now`; reset `last_focus_end_at` if stale gap; reset counter if gap > long-break length (20 min) |
 | `focus-running → *` (ring — natural 25:00)      | Increment counter; write `focus_session` row (`end_cause='ring'`) |
 | `focus-running → *` (stop — interruption) | **Reset counter to 0**; write `focus_session` row (`end_cause='stop'`) |
 | `focus-running → transitioning` (ring)   | Snapshot counter to determine target (`break` vs `long-break`); long-break iff counter is positive multiple of 4 after increment |
@@ -128,9 +129,9 @@ Research on the canonical Pomodoro Technique rules is complete ([#10](https://gi
 - **"No pause" rule** — confirmed against Cirillo (Wikipedia citing Cirillo: "a pomodoro is indivisible"; Cirillo's Core Process: "work until the pomodoro rings"). No changes; citation can be tightened in a follow-up.
 - **Long break = 15 min** — **overturned and resolved**. Cirillo's archived Get Started pages and Wikipedia give **20–30 min**; [#11](https://github.com/edrobertsrayne/pomodoro/issues/11) resolved the long break to **20 min** (Cirillo's endorsed default). ADR revised in place.
 - **Cycle counter increments on every focus end (incl. `stop`)** — not directly stated in any primary source; defensible extrapolation. **Resolved by [#12](https://github.com/edrobertsrayne/pomodoro/issues/12)**, which **overturned** this extrapolation: canonical Pomodoro has only two focus-end causes (`ring`, `stop`), and `stop` now **resets** the counter to 0 rather than ticking. Long breaks fire iff 4 *consecutive completed* pomodoros ring. ADR revised in place.
-- **Cycle counter resets on gap > 15 min** — **not in any primary source**; the 15-min number mirrors the now-overturned long-break length. Tracked in [issue #13](https://github.com/edrobertsrayne/pomodoro/issues/13). Sharpened by #12: with `stop` now resetting by the same "break-in-chain" principle, the likely resolution is to drop the magic 15-min threshold entirely (any break in the consecutive-completed chain — `stop` or tab-close/long-walk-away — resets it alike).
+- **Cycle counter resets on gap > long-break length** — not in any primary source as a *specific* number, but the threshold is now derived from the long-break length (a single shared variable, 20 min) rather than invented as a standalone constant. **Resolved by [#13](https://github.com/edrobertsrayne/pomodoro/issues/13)**: the rule is **kept** (not dropped), because a long idle gap between rung focuses is a break-in-chain of the same kind a `stop` is ([#12](https://github.com/edrobertsrayne/pomodoro/issues/12)), and dropping it would let "consecutive completed" span hours across one open tab — contradicting the destination's "2 hours of uninterrupted work." The old 15-min number — a *separate* constant inherited from the old 15-min long break — is retired; pinning both the long break and the gap threshold to one variable makes the drift that caused #13 structurally impossible. The gap is measured from the last focus-end (`last_focus_end_at`).
 
-#11 and #12 resolved; this ADR revised in place for the long-break length, no-pause citation, and stop-cycles-counter rule. #13 pending — further revision to come.
+#11, #12, and #13 resolved; this ADR revised in place for the long-break length, no-pause citation, stop-resets-counter rule, and gap-reset threshold (retied to the long-break length as one shared variable, retired standalone 15-min constant).
 
 ## Consequences
 
