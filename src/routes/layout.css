@@ -1,2 +1,85 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/plus-jakarta-sans';
 @plugin '@tailwindcss/forms';
+
+@theme {
+	--font-sans:
+		'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+
+	--color-bg: #fcf4f1;
+	--color-surface: #fff9f6;
+	--color-surface-2: #f6e3dc;
+	--color-ink: #4a3a37;
+	--color-ink-soft: #a07e78;
+	--color-accent: #d9685a;
+	--color-accent-2: #ee9690;
+	--color-border: #f0d8cf;
+	--color-hover: #f6e3dc;
+	--color-active: #f0d4c8;
+	--color-focus-ring: #ee9690;
+	--color-error: #b8454a;
+	--color-error-bg: #f6dad6;
+	--color-success: #6f8a4a;
+	--color-on-accent: #fff9f6;
+}
+
+:root {
+	--bg: #fcf4f1;
+	--surface: #fff9f6;
+	--surface-2: #f6e3dc;
+	--ink: #4a3a37;
+	--ink-soft: #a07e78;
+	--accent: #d9685a;
+	--accent-2: #ee9690;
+	--border: #f0d8cf;
+	--hover: #f6e3dc;
+	--active: #f0d4c8;
+	--focus-ring: #ee9690;
+	--error: #b8454a;
+	--error-bg: #f6dad6;
+	--success: #6f8a4a;
+	--shadow: 0 10px 30px -12px rgba(74, 58, 55, 0.2);
+	--shadow-sm: 0 2px 8px -3px rgba(74, 58, 55, 0.15);
+
+	--bg-break: #e8efe2;
+	--surface-break: #eff5e9;
+	--accent-break: #6b8a55;
+	--ink-break: #3a4632;
+
+	color-scheme: light;
+}
+
+[data-phase='focus'] {
+	--bg: var(--bg, #fcf4f1);
+	--surface: var(--surface, #fff9f6);
+	--accent: var(--accent, #d9685a);
+	--ink: var(--ink, #4a3a37);
+}
+
+:root[data-phase='break'] {
+	--bg: var(--bg-break);
+	--surface: var(--surface-break);
+	--accent: var(--accent-break);
+	--ink: var(--ink-break);
+}
+
+html,
+body {
+	height: 100%;
+	background: var(--bg);
+	color: var(--ink);
+	font-family: var(--font-sans), 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+	transition:
+		background-color 200ms ease,
+		color 200ms ease;
+}
+
+body {
+	font-feature-settings: 'cv11', 'ss01';
+}
+
+@layer utilities {
+	.font-timer {
+		font-variant-numeric: tabular-nums;
+	}
+}
