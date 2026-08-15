@@ -13,7 +13,7 @@ The active period a user is running a pomodoro against a specific task. A focus 
 _Avoid_: active pomodoro, running timer
 
 **Break Session**:
-A short break (5 min) or long break (15 min) between focus sessions. Long breaks occur after every fourth focus session; the rest are short breaks. Break sessions are not associated with tasks and do not count toward any task's actuals.
+A short break (5 min) or long break (20 min) between focus sessions. Either focus-end cause (`ring` or `stop`) routes to a short break; long breaks occur only after every fourth **consecutive completed** focus session — i.e. four `ring`s in a row with no `stop` breaking the chain. Break sessions are not associated with tasks and do not count toward any task's actuals.
 _Avoid_: rest, idle
 
 **Task**:
@@ -48,5 +48,5 @@ _Avoid_: today, current day
 _Deferred to the streak-tracking effort. Not part of the first vertical slice._
 
 **Pomodoro Cycle**:
-The classic 25 / 5 / 15 rhythm: a focus session, a short break, four focuses to a long break. In this app the cycle is half-auto — finishing a focus auto-starts the next break, but a break ending does _not_ auto-start the next focus: the timer returns to idle and waits for an explicit `start focus` gesture.
+The classic 25 / 5 / 20 rhythm: a focus session, a short break, four *consecutive completed* focuses to a long break. In this app the cycle is half-auto — finishing a focus auto-starts the next break, but a break ending does _not_ auto-start the next focus: the timer returns to idle and waits for an explicit `start focus` gesture. An interrupted (`stop`ped) focus still routes to a short break but **resets** the consecutive-completed counter to 0, so a `stop` one focus short of the long break wipes the streak.
 _Avoid_: round, sequence
