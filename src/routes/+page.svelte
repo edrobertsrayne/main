@@ -4,6 +4,8 @@
 	import { resolve } from '$app/paths';
 	import { TimerController } from '$lib/timer/timer-controller.svelte';
 	import { signals } from '$lib/timer/signals-instance';
+	import { localDay } from '$lib/local-day';
+	import { compareTasksForDefaultView, shouldShowSoftNudge } from '$lib/tasks/sort';
 
 	type TaskRow = {
 		id: string;
@@ -14,12 +16,74 @@
 		archivedAt: number | null;
 		createdAt: number;
 		actuals: number;
+		isPrimaryToday: boolean;
 	};
 
 	let { data } = $props();
 
 	type Filter = 'all' | 'today' | 'done' | 'archived';
 	let filter = $state<Filter | null>(null);
+
+	// "Today" is computed client-side only — the server never re-derives
+	// a day from an instant. The `localDay` helper is the same `Intl`
+	// module used by the data layer for `focus_session.local_day`. The
+	// derived value depends on `timer.nowTick` (the reactive tick that
+	// drives every countdown) so it re-runs every second — required so
+	// the day-boundary seed fires when the local-time day changes while
+	// the tab stays open across midnight.
+	const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+	// `today` is computed once on mount from the browser's local clock
+	// and the browser timezone. The data layer takes the day string
+	// from the URL (`?day=`), so the load result drives the page's
+	// `primaryCount` and `isPrimaryToday` per row — `today` itself
+	// only needs to be reactive to the seed/navigation effects below.
+	const today = $derived(localDay(Date.now(), browserTimeZone));
+
+	// Fires at the next local-midnight boundary. Re-armed on load and on
+	// each focus start so the chain doesn't drift while the user idles.
+	// The callback doesn't navigate — the server `load` defaults `day`
+	// to today, so the next user interaction (or reload) will see the
+	// new day's data automatically, and the `seedDay` in the load will
+	// carry over unfinished primaries from the previous day. Avoiding a
+	// hard navigation here also keeps the timer running undisturbed if
+	// the user is mid-focus when midnight crosses.
+	let midnightTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+	function msUntilNextLocalMidnight(timeZone: string): number {
+		// Use the local hour/minute/second parts inside the target
+		// timezone (returned by Intl) to compute the ms remaining until
+		// the next local midnight. A small buffer (1s) ensures the
+		// timeout fires after the day has actually rolled over.
+		const parts = new Intl.DateTimeFormat('en-GB', {
+			timeZone,
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+			hour12: false
+		}).formatToParts(new Date());
+		const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '0';
+		const hour = Number.parseInt(get('hour'), 10);
+		const minute = Number.parseInt(get('minute'), 10);
+		const second = Number.parseInt(get('second'), 10);
+		const msIntoDay = (hour * 3600 + minute * 60 + second) * 1000;
+		return 24 * 3600 * 1000 - msIntoDay + 1000;
+	}
+
+	function armMidnightTimeout() {
+		if (midnightTimeoutId !== null) {
+			clearTimeout(midnightTimeoutId);
+		}
+		const ms = msUntilNextLocalMidnight(browserTimeZone);
+		midnightTimeoutId = setTimeout(() => {
+			midnightTimeoutId = null;
+			// Re-arm the chain for the next midnight. No navigation:
+			// the next user interaction (or reload) will hit the
+			// server `load`, which defaults `day` to today and runs
+			// `seedDay` with the new `today` and the previous day as
+			// `yesterday`.
+			armMidnightTimeout();
+		}, ms);
+	}
 
 	const timer = new TimerController({
 		onFocusEnd: async (input) => {
@@ -61,7 +125,21 @@
 		timer.state === 'idle' || timer.state === 'focus-running' ? 'focus' : 'break'
 	);
 
-	const firstNonArchivedTask = $derived(data.tasks.find((t) => !t.archived) ?? null);
+	// Sorted once: the default-view sort is `isPrimaryToday DESC,
+	// createdAt ASC` (the pure comparator in $lib/tasks/sort). All
+	// filter views read from this sorted list so the floated group stays
+	// above the non-floated group regardless of which filter is active.
+	const sortedTasks = $derived([...data.tasks].sort(compareTasksForDefaultView));
+
+	// Auto-select for the timer: prefer the first primary-today,
+	// non-archived task, falling back to the first non-archived task.
+	// The primary marker is the user's plan for the day, so "start
+	// focus" picks the obvious task without the user choosing each
+	// time. Sort order is preserved by `sortedTasks`.
+	const firstPrimaryTask = $derived(sortedTasks.find((t) => !t.archived && t.isPrimaryToday));
+	const firstNonArchivedTask = $derived(
+		firstPrimaryTask ?? sortedTasks.find((t) => !t.archived) ?? null
+	);
 	const focusedTask = $derived(
 		timer.taskId ? (data.tasks.find((t) => t.id === timer.taskId) ?? null) : null
 	);
@@ -94,23 +172,37 @@
 		);
 	});
 
+	// The "Today" filter isolates today's primaries (the user can think
+	// of it as "show me my day plan"). Done-but-not-archived primaries
+	// and archived-but-not-done primaries are kept here because the
+	// primary marker is the planning marker — the user wants to see the
+	// plan, regardless of completion. The "All" / "Done" / "Archived"
+	// filters keep the same semantics as before; the float on top comes
+	// from `sortedTasks`. The default view (no filter) hides done and
+	// archived tasks.
 	const filtered = $derived.by((): TaskRow[] => {
-		const rows = data.tasks;
 		switch (filter) {
 			case 'all':
-				return rows;
+				return sortedTasks;
 			case 'today':
-				return rows.filter((t) => !t.archived && !t.done);
+				return sortedTasks.filter((t) => t.isPrimaryToday);
 			case 'done':
-				return rows.filter((t) => t.done);
+				return sortedTasks.filter((t) => t.done);
 			case 'archived':
-				return rows.filter((t) => t.archived);
+				return sortedTasks.filter((t) => t.archived);
 			default:
-				return rows.filter((t) => !t.archived && !t.done);
+				return sortedTasks.filter((t) => !t.archived && !t.done);
 		}
 	});
 
-	const todayCount = $derived(data.tasks.filter((t) => !t.archived && !t.done).length);
+	// The counter next to "Today" is the primary count, not the queue
+	// length. The "Today" filter is the day-plan view, so its count
+	// reflects how many primaries the user has committed to.
+	const primaryCount = $derived(data.primaryTaskCount);
+	const softNudgeVisible = $derived(shouldShowSoftNudge(primaryCount));
+
+	// Number of non-archived active tasks (for the "Today's tasks" header).
+	const activeTaskCount = $derived(data.tasks.filter((t) => !t.archived && !t.done).length);
 
 	function pips(estimate: number, actuals: number) {
 		const filled = Math.min(actuals, estimate);
@@ -136,8 +228,32 @@
 		// edge. This also stops any running title pulse and clears the
 		// `data-title-pulse` attribute.
 		signals.resetOnNextStartFocus();
+		// Re-arm the midnight timeout: each focus start resets the chain
+		// so the timer doesn't drift. The midnight-fire-and-seed relies
+		// on the timeout being fresh — if the user started a focus 22
+		// hours ago, the original timeout (set 22 hours earlier) might
+		// already have missed the boundary.
+		armMidnightTimeout();
 		timer.startFocus(firstNonArchivedTask.id);
 	}
+
+	// The server `load` handles the day-boundary seed (it runs `seedDay`
+	// with the safe `today` and `yesterday` on every navigation). The
+	// midnight callback above navigates to `?day=newToday`, which causes
+	// the server `load` to re-run and seed the new day with carry-over
+	// primaries from the previous one. No client-side `$effect` needed.
+
+	// One-time setup: arm the midnight chain. The effect cleanup
+	// clears the timeout on unmount.
+	$effect(() => {
+		armMidnightTimeout();
+		return () => {
+			if (midnightTimeoutId !== null) {
+				clearTimeout(midnightTimeoutId);
+				midnightTimeoutId = null;
+			}
+		};
+	});
 </script>
 
 <!-- The data-phase attribute on this root drives the held palette swap.
@@ -318,8 +434,8 @@
 			<div class="mb-3 flex items-baseline justify-between">
 				<h2 id="tasks-heading" class="text-lg font-semibold tracking-tight">Today's tasks</h2>
 				<span class="text-xs text-[var(--ink-soft)]">
-					{todayCount}
-					{todayCount === 1 ? 'task' : 'tasks'}
+					{activeTaskCount}
+					{activeTaskCount === 1 ? 'task' : 'tasks'}
 				</span>
 			</div>
 
@@ -363,15 +479,26 @@
 						role="tab"
 						aria-selected={filter === tab.id}
 						data-filter={tab.id}
+						data-today-count={tab.id === 'today' ? String(primaryCount) : null}
 						onclick={() => (filter = tab.id as Filter)}
 						class="rounded-md px-3 py-1.5 transition-colors {filter === tab.id
 							? 'bg-[var(--surface-2)] font-medium text-[var(--ink)]'
 							: 'text-[var(--ink-soft)] hover:bg-[var(--hover)]'}"
 					>
-						{tab.label}
+						{tab.label}{tab.id === 'today' ? ` (${primaryCount})` : ''}
 					</button>
 				{/each}
 			</div>
+
+			{#if softNudgeVisible}
+				<p
+					class="mb-3 rounded-md border border-[var(--accent)]/30 bg-[var(--accent)]/5 px-3 py-2 text-xs text-[var(--ink-soft)]"
+					data-soft-nudge
+					role="note"
+				>
+					You've planned {primaryCount} primary tasks today — a lighter day might be more sustainable.
+				</p>
+			{/if}
 
 			{#if filtered.length === 0}
 				<p
@@ -380,7 +507,7 @@
 					{#if filter === 'all'}
 						No tasks yet. Add one above to get started.
 					{:else if filter === 'today'}
-						Nothing planned for today.
+						Nothing planned for today — toggle ★ on a row below.
 					{:else if filter === 'done'}
 						No completed tasks yet.
 					{:else}
@@ -395,7 +522,28 @@
 							data-task-row
 							data-task-id={task.id}
 							data-task-title={task.title}
+							data-is-primary-today={String(task.isPrimaryToday)}
 						>
+							<form method="POST" action="?/togglePrimary" use:enhance class="contents">
+								<input type="hidden" name="id" value={task.id} />
+								<input type="hidden" name="day" value={today} />
+								<input type="hidden" name="primary" value={String(!task.isPrimaryToday)} />
+								<button
+									type="submit"
+									aria-label={task.isPrimaryToday
+										? 'Unmark as primary task for today'
+										: 'Mark as primary task for today'}
+									aria-pressed={task.isPrimaryToday}
+									data-primary-toggle
+									data-is-primary={String(task.isPrimaryToday)}
+									class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-base leading-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] {task.isPrimaryToday
+										? 'text-[var(--accent)] hover:bg-[var(--active)]'
+										: 'text-[var(--ink-soft)] hover:bg-[var(--active)] hover:text-[var(--accent)]'}"
+								>
+									★
+								</button>
+							</form>
+
 							<form method="POST" action="?/toggleDone" use:enhance class="contents">
 								<input type="hidden" name="id" value={task.id} />
 								<input type="hidden" name="done" value={String(!task.done)} />

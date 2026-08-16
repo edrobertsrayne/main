@@ -9,11 +9,25 @@ import {
 	updateTaskTitle
 } from '$lib/server/db/tasks';
 import { recordFocusSession } from '$lib/server/db/focus-sessions';
+import { countPrimaryTasksForDay, togglePrimaryTask } from '$lib/server/db/daily-primary-tasks';
+import { seedDay } from '$lib/server/db/seed';
+import { defaultTimeZone, localDay, shiftDay } from '$lib/local-day';
+
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** @type {import('./$types').PageServerLoad} */
-export function load() {
+export function load({ url }) {
 	const db = getDb();
-	return { tasks: listTasksWithActuals(db) };
+	const today = localDay(Date.now(), defaultTimeZone());
+	const day = url.searchParams.get('day');
+	const safeDay = day && DAY_PATTERN.test(day) ? day : today;
+	const yesterday = shiftDay(safeDay, -1);
+	seedDay(db, { today: safeDay, yesterday });
+	return {
+		tasks: listTasksWithActuals(db, safeDay),
+		primaryTaskCount: countPrimaryTasksForDay(db, safeDay),
+		today: safeDay
+	};
 }
 
 /** @satisfies {import('./$types').Actions} */
@@ -80,6 +94,40 @@ export const actions = {
 		const db = getDb();
 		setTaskArchived(db, id, archived);
 		return { action: 'toggleArchive', id };
+	},
+
+	togglePrimary: async ({ request }) => {
+		const data = await request.formData();
+		const id = String(data.get('id') ?? '');
+		const day = String(data.get('day') ?? '');
+		const isPrimary = data.get('primary') === 'true';
+		if (!id) return fail(400, { action: 'togglePrimary', id, message: 'id is required' });
+		if (!DAY_PATTERN.test(day)) {
+			return fail(400, { action: 'togglePrimary', id, message: 'day must be YYYY-MM-DD' });
+		}
+
+		const db = getDb();
+		togglePrimaryTask(db, { taskId: id, day, isPrimary });
+		return { action: 'togglePrimary', id };
+	},
+
+	seedDay: async ({ request }) => {
+		const data = await request.formData();
+		const today = String(data.get('today') ?? '');
+		const yesterday = String(data.get('yesterday') ?? '');
+		if (!DAY_PATTERN.test(today)) {
+			return fail(400, { message: 'today must be YYYY-MM-DD' });
+		}
+		if (yesterday && !DAY_PATTERN.test(yesterday)) {
+			return fail(400, { message: 'yesterday must be YYYY-MM-DD' });
+		}
+
+		const db = getDb();
+		const result = seedDay(db, {
+			today,
+			yesterday: yesterday || undefined
+		});
+		return { ok: true, ...result };
 	},
 
 	recordFocus: async ({ request }) => {

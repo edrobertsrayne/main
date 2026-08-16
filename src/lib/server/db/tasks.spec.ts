@@ -11,6 +11,7 @@ import {
 	updateTaskEstimate,
 	updateTaskTitle
 } from './tasks';
+import { togglePrimaryTask } from './daily-primary-tasks';
 import * as schema from './schema';
 import { focusSessions, tasks as tasksTable } from './schema';
 
@@ -227,5 +228,35 @@ describe('setTaskArchived', () => {
 
 	it('returns undefined for an unknown id', () => {
 		expect(setTaskArchived(db, 'nope', true)).toBeUndefined();
+	});
+});
+
+describe('listTasksWithActuals with day scoping (primary tasks)', () => {
+	it('returns isPrimaryToday=false for all tasks when no day is passed', () => {
+		const a = addTask(db, { title: 'A', estimate: 1 });
+		const list = listTasksWithActuals(db);
+		expect(list).toHaveLength(1);
+		expect(list[0]?.isPrimaryToday).toBe(false);
+		expect(a.id).toBeDefined();
+	});
+
+	it('returns isPrimaryToday=true for tasks marked primary on the given day', () => {
+		const a = addTask(db, { title: 'A', estimate: 1 });
+		const b = addTask(db, { title: 'B', estimate: 1 });
+		togglePrimaryTask(db, { taskId: a.id, day: '2026-08-15', isPrimary: true });
+		const list = listTasksWithActuals(db, '2026-08-15');
+		const aRow = list.find((r) => r.id === a.id);
+		const bRow = list.find((r) => r.id === b.id);
+		expect(aRow?.isPrimaryToday).toBe(true);
+		expect(bRow?.isPrimaryToday).toBe(false);
+	});
+
+	it('scopes by day: a task marked primary on Mon is not primary on Tue', () => {
+		const a = addTask(db, { title: 'A', estimate: 1 });
+		togglePrimaryTask(db, { taskId: a.id, day: '2026-08-15', isPrimary: true });
+		const mon = listTasksWithActuals(db, '2026-08-15');
+		const tue = listTasksWithActuals(db, '2026-08-16');
+		expect(mon[0]?.isPrimaryToday).toBe(true);
+		expect(tue[0]?.isPrimaryToday).toBe(false);
 	});
 });

@@ -175,10 +175,16 @@ test('All filter surfaces hidden done and archived rows', async ({ page }) => {
 	await expect(rows).toHaveCount(2);
 });
 
-test('Today filter is wired but inert (no primary tasks yet)', async ({ page }) => {
+test('Today filter isolates primaries (no primaries yet shows the empty-state copy)', async ({
+	page
+}) => {
 	await addTask(page, 'A');
 	await page.getByRole('tab', { name: 'Today' }).click();
-	await expect(page.locator('[data-task-row]')).toHaveCount(1);
+	// Now functional: the filter isolates today's primaries. With no
+	// primaries set, the list is empty and the empty-state copy mentions
+	// the ★ toggle.
+	await expect(page.locator('[data-task-row]')).toHaveCount(0);
+	await expect(page.getByText('Nothing planned for today')).toBeVisible();
 });
 
 test('actuals render as act/est with pip indicators', async ({ page }) => {

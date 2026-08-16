@@ -2,6 +2,7 @@ import { count, eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
 import { tasks, focusSessions } from './schema';
+import { listPrimaryTaskIdsForDay } from './daily-primary-tasks';
 
 export type Database = BetterSQLite3Database<typeof schema>;
 
@@ -9,6 +10,12 @@ export type TaskRow = schema.Task;
 
 export type TaskWithActuals = TaskRow & {
 	actuals: number;
+	/**
+	 * Whether this task is marked as one of today's primary tasks. Only
+	 * populated when `listTasksWithActuals` is called with a `day` string;
+	 * without a day, all rows report `false` (no day, no primary scoping).
+	 */
+	isPrimaryToday: boolean;
 };
 
 export function addTask(db: Database, input: { title: string; estimate: number }): TaskRow {
@@ -28,8 +35,15 @@ export function addTask(db: Database, input: { title: string; estimate: number }
 	return row;
 }
 
-export function listTasksWithActuals(db: Database): TaskWithActuals[] {
+/**
+ * Read all tasks plus their derived `actuals` count. When `day` is passed,
+ * each row also reports `isPrimaryToday` based on the `daily_primary_tasks`
+ * table's composite `(task_id, day)` key — the UI uses this to float
+ * primaries to the top of the default view and to label the "Today" filter.
+ */
+export function listTasksWithActuals(db: Database, day?: string): TaskWithActuals[] {
 	const rows = db.select().from(tasks).all();
+	const primaryIds = day ? listPrimaryTaskIdsForDay(db, day) : new Set<string>();
 	return rows.map((row) => ({
 		...row,
 		actuals:
@@ -37,7 +51,8 @@ export function listTasksWithActuals(db: Database): TaskWithActuals[] {
 				.select({ value: count() })
 				.from(focusSessions)
 				.where(eq(focusSessions.taskId, row.id))
-				.get()?.value ?? 0
+				.get()?.value ?? 0,
+		isPrimaryToday: primaryIds.has(row.id)
 	}));
 }
 
@@ -47,7 +62,7 @@ export function getTaskWithActuals(db: Database, id: string): TaskWithActuals | 
 	const actuals =
 		db.select({ value: count() }).from(focusSessions).where(eq(focusSessions.taskId, id)).get()
 			?.value ?? 0;
-	return { ...row, actuals };
+	return { ...row, actuals, isPrimaryToday: false };
 }
 
 export function updateTaskTitle(db: Database, id: string, title: string): TaskRow | undefined {

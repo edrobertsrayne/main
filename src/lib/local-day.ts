@@ -30,3 +30,18 @@ export function localDay(epochMs: number, timeZone: string = defaultTimeZone()):
 export function defaultTimeZone(): string {
 	return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
+
+/**
+ * Shift a `YYYY-MM-DD` day string by `delta` calendar days. Returns a
+ * `YYYY-MM-DD` string. Pure: parses with `Date.UTC` so it's timezone-free
+ * (we only care about the calendar date). Negative `delta` walks backwards.
+ */
+export function shiftDay(day: string, delta: number): string {
+	const [y, m, d] = day.split('-').map(Number) as [number, number, number];
+	const utc = new Date(Date.UTC(y, m - 1, d));
+	utc.setUTCDate(utc.getUTCDate() + delta);
+	const yy = utc.getUTCFullYear();
+	const mm = String(utc.getUTCMonth() + 1).padStart(2, '0');
+	const dd = String(utc.getUTCDate()).padStart(2, '0');
+	return `${yy}-${mm}-${dd}`;
+}
